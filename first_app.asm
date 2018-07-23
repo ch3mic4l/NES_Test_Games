@@ -7,6 +7,12 @@ HEADER:
 	.bank 0
 	.org $C000
 
+; Setup Variables
+	.rsset $0000
+controller1state .rs 1 ; Holds the state of the controller (aka which buttons are pressed)
+walking .rs 1
+faceleft .rs 0
+
 RESET:
 	SEI          ; disable IRQs
     CLD          ; disable decimal mode
@@ -131,89 +137,124 @@ LoadAttributeLoop:
 Forever:
 	JMP Forever
 
+CheckFaceDirection:
+	LDA faceleft
+	CMP #$00
+	BEQ StandingRight
+	CLC
+	CMP #$01
+	BEQ StandingLeft
+
+StandingLeft:
+	LDA #$3B
+	STA $020D
+	LDA #$3C
+	STA $0209
+	LDA #$32
+	STA $0205
+	LDA #$33
+	STA $0201
+	LDA #$41
+	STA $020A
+	STA $0202
+	STA $0206
+	STA $020E
+	RTS
+
+StandingRight:
+	LDA #$3B
+	STA $0209
+	LDA #$3C
+	STA $020D
+	LDA #$33
+	STA $0205
+	LDA #$32
+	STA $0201
+	LDA #$01
+	STA $020A
+	STA $020E
+	STA $0202
+	STA $0206
+	RTS
+
+CheckStanding:
+	LDX controller1state
+	CPX #$00
+	BEQ CheckFaceDirection
+	RTS
+
+WalkingRight:
+	LDA #$38
+	STA $0209
+	LDA #$39
+	STA $020D
+	RTS
+
 NMI:
 	LDA #$00
 	STA $2003
 	LDA #$02
 	STA $4014
 
-LatchController:
+ReadController:
 	LDA #$01
 	STA $4016
 	LDA #$00
 	STA $4016
+	LDX #$08
 
-ControllerReadA:
+ReadControllerLoop:
 	LDA $4016
-	AND #%00000001
-	BEQ ControllerReadADone ; If A is not pressed, skip ahead
+	LSR A
+	ROL controller1state
+	DEX
+	BNE ReadControllerLoop
 
-ControllerReadADone:
+ControllerA:
+	LDA controller1state
+	AND #%10000000
+	BEQ ControllerADone ; If A is not pressed, skip ahead
 
-ControllerReadB:
-	LDA $4016
-	AND #%00000001
-	BEQ ControllerReadBDone
-ControllerReadBDone:
+ControllerADone:
+
+ControllerB:
+	LDA controller1state
+	AND #%01000000
+	BEQ ControllerBDone
+ControllerBDone:
 
 ControllerReadSelect:
-	LDA $4016
-	AND #%00000001
+	LDA controller1state
+	AND #%00100000
 	BEQ ControllerReadSelectDone
 ControllerReadSelectDone:
 
-ControllerReadStart:
-	LDA $4016
-	AND #%00000001
-	BEQ ControllerReadStartDone
-ControllerReadStartDone:
+ControllerStart:
+	LDA controller1state
+	AND #%00010000
+	BEQ ControllerStartDone
+ControllerStartDone:
 
-ControllerReadUp:
-	LDA $4016
-	AND #%00000001
-	BEQ ControllerReadUpDone
-	LDX #$00
-MoveCHRUp:
-	LDA $0200, x
-	SEC
-	SBC #$02
-	STA $0200, x
-	STX $0300
-	LDY $0300
-	INX ; The sprites y location is every 4 bytes
-	INX
-	INX
-	INX
-	CPY #$0C ; The last sprites y pos is stored at memory location $020C
-	BNE MoveCHRUp
-ControllerReadUpDone:
+ControllerMoveUp:
+	LDA controller1state
+	AND #%00001000
+	BEQ ControllerUpDone
+ControllerUpDone:
 
-ControllerReadDown:
-	LDA $4016
-	AND #%00000001
-	BEQ ControllerReadDownDone
-	LDX #$00
-MoveCHRDown:
-	LDA $0200, x
-	CLC
-	ADC #$02
-	STA $0200, x
-	STX $0300
-	LDY $0300
-	INX ; The sprites y location is every 4 bytes
-	INX
-	INX
-	INX
-	CPY #$0C ; The last sprites y pos is stored at memory location $020C
-	BNE MoveCHRDown
-ControllerReadDownDone:
+ControllerMoveDown:
+	LDA controller1state
+	AND #%00000100
+	BEQ ControllerDownDone
+ControllerDownDone:
 
-ControllerReadLeft:
-	LDA $4016
-	AND #%00000001
-	BEQ ControllerReadLeftDone
+ControllerMoveLeft:
+	LDA controller1state
+	AND #%00000010
+	BEQ ControllerLeftDone
 	LDX #$03
-MoveCHRLeft:
+MoveLeft:
+	LDA #$01
+	STA faceleft
 	LDA $0200, x
 	SEC
 	SBC #$02
@@ -225,16 +266,18 @@ MoveCHRLeft:
 	INX
 	INX
 	CPY #$0F
-	BNE MoveCHRLeft
-ControllerReadLeftDone:
+	BNE MoveLeft
+ControllerLeftDone:
 
-ControllerReadRight:
-	LDA $4016
+ControllerMoveRight:
+	LDA controller1state
 	AND #%00000001
-	BEQ ControllerReadRightDone ; If A is not pressed, skip ahead
-	; loop to move the sprites as one
+	BEQ MoveRightDone
 	LDX #$03
-MoveCHRRight:
+MoveRight:
+	LDA #$00
+	STA faceleft
+	JSR WalkingRight
 	LDA $0200, x
 	CLC
 	ADC #$02
@@ -246,8 +289,13 @@ MoveCHRRight:
 	INX
 	INX
 	CPY #$0F ; The sprite is last location in memory is $020F
-	BNE MoveCHRRight
-ControllerReadRightDone:
+	BNE MoveRight
+
+MoveRightDone:
+
+	
+	JSR CheckStanding
+
 
 PPUCleanUp:
 	LDA #%10010000
@@ -270,10 +318,10 @@ palette:
 
 sprites:
       ;y pos tile attr x pos
-	.db $80, $32, $01, $80 ; sprite 0
-	.db $80, $33, $01, $88 ; sprite 1
-	.db $88, $34, $01, $80 ; sprite 2
-	.db $88, $35, $01, $88 ; sprite 3
+	.db $AF, $32, $01, $15 ; sprite 0
+	.db $AF, $33, $01, $1D ; sprite 1
+	.db $B7, $3B, $01, $16 ; sprite 2
+	.db $B7, $3C, $01, $1E ; sprite 3
 
 BackgroundTop:
     .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
