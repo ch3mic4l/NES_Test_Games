@@ -11,7 +11,7 @@ HEADER:
 	.rsset $0000
 controller1state .rs 1 ; Holds the state of the controller (aka which buttons are pressed)
 walking .rs 1
-faceleft .rs 0
+facingleft .rs 0
 
 RESET:
 	SEI          ; disable IRQs
@@ -137,40 +137,73 @@ LoadAttributeLoop:
 Forever:
 	JMP Forever
 
-CheckFaceDirection:
-	LDA faceleft
-	CMP #$00
-	BEQ StandingRight
-	CLC
-	CMP #$01
-	BEQ StandingLeft
-
-StandingLeft:
+;; Subrutines Here, this code is never reached normally
+SetStandingRight:
 	LDA #$3B
+	STA $0209
+	LDA #$3C
 	STA $020D
+	RTS
+
+SetStandingLeft:
 	LDA #$3C
 	STA $0209
+	LDA #$3B
+	STA $020D
+	RTS
+
+CheckStandingDirection:
+	LDA facingleft
+	CLC
+	CMP #$00 ; 0 means facing right
+	BEQ SetStandingRight
+	CLC
+	CMP #$01 ; 1 means facing left
+	BEQ SetStandingLeft
+
+
+FaceLeft:
+	LDA #$3B
+	STA $020D ; swap tiles for legs
+	LDA #$3C
+	STA $0209 ; swap tiles for legs
 	LDA #$32
-	STA $0205
+	STA $0205 ; swap tiles for head
 	LDA #$33
-	STA $0201
-	LDA #$41
+	STA $0201 ; swap tiles for head
+	LDA $0203 ; adjust head x cordinate to line up with the body
+	CLC
+	ADC #$04
+	STA $0203
+	CLC
+	LDA $0207
+	ADC #$04
+	STA $0207
+	LDA #$41  ; horizontal flip
 	STA $020A
 	STA $0202
 	STA $0206
 	STA $020E
 	RTS
 
-StandingRight:
+FaceRight:
 	LDA #$3B
-	STA $0209
+	STA $0209 ; Make sure tiles are back into place
 	LDA #$3C
-	STA $020D
+	STA $020D ; Make sure tiles are back into place
 	LDA #$33
-	STA $0205
+	STA $0205 ; Make sure tiles are back into place
 	LDA #$32
-	STA $0201
-	LDA #$01
+	STA $0201 ; Make sure tiles are back into place
+	LDA $0203 ; adjust head x cordinate to line up with the body
+	SEC
+	SBC #$04
+	STA $0203
+	LDA $0207
+	SEC
+	SBC #$04
+	STA $0207
+	LDA #$01 ; Make sure the tiles are not horizontally flipped
 	STA $020A
 	STA $020E
 	STA $0202
@@ -180,7 +213,7 @@ StandingRight:
 CheckStanding:
 	LDX controller1state
 	CPX #$00
-	BEQ CheckFaceDirection
+	BEQ CheckStandingDirection
 	RTS
 
 WalkingRight:
@@ -190,6 +223,14 @@ WalkingRight:
 	STA $020D
 	RTS
 
+WalkingLeft:
+	LDA #$38
+	STA $020D
+	LDA #$39
+	STA $0209
+	RTS
+
+;; END SUBRUTINES
 NMI:
 	LDA #$00
 	STA $2003
@@ -253,8 +294,15 @@ ControllerMoveLeft:
 	BEQ ControllerLeftDone
 	LDX #$03
 MoveLeft:
+	LDA facingleft
+	CLC
+	CMP #$01
+	BEQ AlreadyLeft
+	JSR FaceLeft
 	LDA #$01
-	STA faceleft
+	STA facingleft
+AlreadyLeft:
+	JSR WalkingLeft
 	LDA $0200, x
 	SEC
 	SBC #$02
@@ -266,7 +314,7 @@ MoveLeft:
 	INX
 	INX
 	CPY #$0F
-	BNE MoveLeft
+	BNE AlreadyLeft
 ControllerLeftDone:
 
 ControllerMoveRight:
@@ -275,8 +323,14 @@ ControllerMoveRight:
 	BEQ MoveRightDone
 	LDX #$03
 MoveRight:
+	LDA facingleft
+	CLC
+	CMP #$00
+	BEQ AlreadyRight
+	JSR FaceRight
 	LDA #$00
-	STA faceleft
+	STA facingleft
+AlreadyRight:
 	JSR WalkingRight
 	LDA $0200, x
 	CLC
@@ -289,7 +343,7 @@ MoveRight:
 	INX
 	INX
 	CPY #$0F ; The sprite is last location in memory is $020F
-	BNE MoveRight
+	BNE AlreadyRight
 
 MoveRightDone:
 
@@ -318,8 +372,8 @@ palette:
 
 sprites:
       ;y pos tile attr x pos
-	.db $AF, $32, $01, $15 ; sprite 0
-	.db $AF, $33, $01, $1D ; sprite 1
+	.db $AF, $32, $01, $14 ; sprite 0
+	.db $AF, $33, $01, $1C ; sprite 1
 	.db $B7, $3B, $01, $16 ; sprite 2
 	.db $B7, $3C, $01, $1E ; sprite 3
 
