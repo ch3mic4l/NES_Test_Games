@@ -7,6 +7,26 @@ HEADER:
 	.bank 0
 	.org $C000
 
+	; Load controller library
+	.include "library\controllers\controller.asm"
+
+	; Load Graphics libraries
+
+	; Load Sprite libraries
+	.include "graphics\load_sprites.asm"
+	.include "graphics\sprite_animations.asm"
+
+	; Load Background libraries
+	.include "library\backgrounds\load_background.asm"
+	.include "library\backgrounds\bg1\bg1.asm"
+	.include "library\backgrounds\bg2\bg2.asm"
+
+	; Load Color Attributes
+	.include "library\backgrounds\load_palletes.asm"
+
+	; Load PPU library
+	.include "library\ppu\ppu.asm"
+
 ; Setup Variables
 	.rsset $0000
 controller1state .rs 1 ; Holds the state of the controller (aka which buttons are pressed)
@@ -25,9 +45,7 @@ RESET:
     STX $2001    ; disable rendering
     STX $4010    ; disable DMC IRQs
 
-WaitForVBlank: 	 ; First wait for vblank to make sure PPU is ready
-	BIT $2002
-	BPL WaitForVBlank
+    JSR WaitForVBlank
 
 CLRMem:          ; Clear the RAM
 	LDA #$00
@@ -43,388 +61,38 @@ CLRMem:          ; Clear the RAM
 	INX
 	BNE CLRMem
 
-WaitForVBlank2:  ; Second wait for vblank, PPU is ready after this
-	BIT $2002
-	BPL WaitForVBlank2
+	JSR WaitForVBlank  ; Second wait for vblank, PPU is ready after this
 
-LoadPalettes:
-	LDA $2002
-	LDA #$3F
-	STA $2006
-	LDA #$00
-	STA $2006
-	LDX #$00
+	JSR LoadPalettes
 
-LoadPalettesLoop:
-	LDA palette, x
-	STA $2007
-	INX
-	CPX #$20
-	BNE LoadPalettesLoop
+	JSR LoadSprites
 
-LoadSprites:
-	LDX #$00
+	JSR PrepPPUForBGLoad ; Prep the PPU to load the first BG(BackGround)
 
-LoadSpritesLoop:
-	LDA sprites, x
-	STA $0200, x
-	INX
-	CPX #$10
-	BNE LoadSpritesLoop
+	JSR LoadBG1 ; Load the initial BG
 
-LoadBackground:
-	LDA $2002
-	LDA #$20
-	STA $2006
-	LDA #$00
-	STA $2006
-	LDX #$00
-
-; The Background will have to be loaded in 4 sections
-LoadBackgroundTop:
-	LDA BackgroundTop, x
-	STA $2007
-	INX
-	CPX #$00
-	BNE LoadBackgroundTop
-	LDX #$00
-
-LoadBackgroundTopMid:
-	LDA BackgroundTopMid, x
-	STA $2007
-	INX
-	CPX #$00
-	BNE LoadBackgroundTopMid
-	LDX #$00
-
-LoadBackgroundBottomMid:
-	LDA BackgroundBottomMid, x
-	STA $2007
-	INX
-	CPX #$00
-	BNE LoadBackgroundBottomMid
-	LDX #$00
-
-LoadBackgroundBottom:
-	LDA BackgroundBottom, x
-	STA $2007
-	INX
-	CPX #$C0
-	BNE LoadBackgroundBottom
-
-LoadAttribute:
-	LDA $2002
-	LDA #$23
-	STA $2006
-	LDA #$C0
-	STA $2006
-	LDX #$00
-
-LoadAttributeLoop:
-	LDA attribute, x
-	STA $2007
-	INX
-	CPX #$40
-	BNE LoadAttributeLoop
+	JSR LoadAttribute ; Apply color to the BG
 
 
-	LDA #%10010000 ; enable NMI, sprites from Pattern Table 1
-	STA $2000
-
-	LDA #%00011110 ; enable sprites
-	STA $2001
-	JMP Forever
-
-LoadNewBG:
-	BIT $2002
-	BPL LoadNewBG
-	LDX #$00
-	STX $2000    ; disable NMI
-    STX $2001    ; disable rendering
-    STX $4010    ; disable DMC IRQs
-    LDA $2002
-	LDA #$20
-	STA $2006
-	LDA #$00
-	STA $2006
-	LDX #$00
-
-LoadNewBGTop:
-	LDA NewBGTop, x
-	STA $2007
-	INX
-	CPX #$00
-	BNE LoadNewBGTop
-	LDX #$00
-
-LoadNewBGTopMid:
-	LDA NewBGTopMid, x
-	STA $2007
-	INX
-	CPX #$00
-	BNE LoadNewBGTopMid
-	LDX #$00
-
-LoadNewBGBottomMid:
-	LDA NewBGBottomMid, x
-	STA $2007
-	INX
-	CPX #$00
-	BNE LoadNewBGBottomMid
-	LDX #$00
-
-LoadNewBGBottom:
-	LDA NewBGBottom, x
-	STA $2007
-	INX
-	CPX #$C0
-	BNE LoadNewBGBottom
-
-	LDA #$15
-	STA $0203
-	LDA #$1D
-	STA $0207
-	LDA #$16
-	STA $020B
-	LDA #$1E
-	STA $020F
-
-	LDA #%10010000 ; enable NMI, sprites from Pattern Table 1
-	STA $2000
-
-	LDA #%00011110 ; enable sprites
-	STA $2001
+	JSR EnableNMI 
+	JSR EnableSprites
 
 Forever:
 	JMP Forever
 
-;; Subrutines Here, this code is never reached normally
-SetStandingRight:
-	LDA #$3B
-	STA $0209
-	LDA #$3C
-	STA $020D
-	RTS
-
-SetStandingLeft:
-	LDA #$3C
-	STA $0209
-	LDA #$3B
-	STA $020D
-	RTS
-
-CheckStandingDirection:
-	LDA facingleft
-	CLC
-	CMP #$00 ; 0 means facing right
-	BEQ SetStandingRight
-	CLC
-	CMP #$01 ; 1 means facing left
-	BEQ SetStandingLeft
-
-
-FaceLeft:
-	LDA #$3B
-	STA $020D ; swap tiles for legs
-	LDA #$3C
-	STA $0209 ; swap tiles for legs
-	LDA #$32
-	STA $0205 ; swap tiles for head
-	LDA #$33
-	STA $0201 ; swap tiles for head
-	LDA $0203 ; adjust head x cordinate to line up with the body
-	CLC
-	ADC #$04
-	STA $0203
-	CLC
-	LDA $0207
-	ADC #$04
-	STA $0207
-	LDA #$41  ; horizontal flip
-	STA $020A
-	STA $0202
-	STA $0206
-	STA $020E
-	RTS
-
-FaceRight:
-	LDA #$3B
-	STA $0209 ; Make sure tiles are back into place
-	LDA #$3C
-	STA $020D ; Make sure tiles are back into place
-	LDA #$33
-	STA $0205 ; Make sure tiles are back into place
-	LDA #$32
-	STA $0201 ; Make sure tiles are back into place
-	LDA $0203 ; adjust head x cordinate to line up with the body
-	SEC
-	SBC #$04
-	STA $0203
-	LDA $0207
-	SEC
-	SBC #$04
-	STA $0207
-	LDA #$01 ; Make sure the tiles are not horizontally flipped
-	STA $020A
-	STA $020E
-	STA $0202
-	STA $0206
-	RTS
-
-CheckStanding:
-	LDX controller1state
-	CPX #$00
-	BEQ CheckStandingDirection
-	RTS
-
-WalkingRight:
-	LDA #$38
-	STA $0209
-	LDA #$39
-	STA $020D
-	RTS
-
-WalkingLeft:
-	LDA #$38
-	STA $020D
-	LDA #$39
-	STA $0209
-	RTS
-
-;; END SUBRUTINES
 NMI:
 	LDA #$00
 	STA $2003
 	LDA #$02
 	STA $4014
 
-ReadController:
-	LDA #$01
-	STA $4016
-	LDA #$00
-	STA $4016
-	LDX #$08
+	JSR LoadControllerState
+	JSR ActOnButtonPresses
 
-ReadControllerLoop:
-	LDA $4016
-	LSR A
-	ROL controller1state
-	DEX
-	BNE ReadControllerLoop
-
-ControllerA:
-	LDA controller1state
-	AND #%10000000
-	BEQ ControllerADone ; If A is not pressed, skip ahead
-
-ControllerADone:
-
-ControllerB:
-	LDA controller1state
-	AND #%01000000
-	BEQ ControllerBDone
-ControllerBDone:
-
-ControllerReadSelect:
-	LDA controller1state
-	AND #%00100000
-	BEQ ControllerReadSelectDone
-ControllerReadSelectDone:
-
-ControllerStart:
-	LDA controller1state
-	AND #%00010000
-	BEQ ControllerStartDone
-ControllerStartDone:
-
-ControllerMoveUp:
-	LDA controller1state
-	AND #%00001000
-	BEQ ControllerUpDone
-ControllerUpDone:
-
-ControllerMoveDown:
-	LDA controller1state
-	AND #%00000100
-	BEQ ControllerDownDone
-ControllerDownDone:
-
-ControllerMoveLeft:
-	LDA controller1state
-	AND #%00000010
-	BEQ ControllerLeftDone
-	LDX #$03
-MoveLeft:
-	LDA facingleft
-	CLC
-	CMP #$01
-	BEQ AlreadyLeft
-	JSR FaceLeft
-	LDA #$01
-	STA facingleft
-AlreadyLeft:
-	JSR WalkingLeft
-	LDA $0200, x
-	SEC
-	SBC #$02
-	STA $0200, x
-	STX $0300
-	LDY $0300
-	INX
-	INX
-	INX
-	INX
-	CPY #$0F
-	BNE AlreadyLeft
-ControllerLeftDone:
-
-ControllerMoveRight:
-	LDA controller1state
-	AND #%00000001
-	BEQ MoveRightDone
-	LDX #$03
-MoveRight:
-	LDA facingleft
-	CLC
-	CMP #$00
-	BEQ AlreadyRight
-	JSR FaceRight
-	LDA #$00
-	STA facingleft
-AlreadyRight:
-	JSR WalkingRight
-	LDA $0200, x
-	CLC
-	ADC #$02
-	CLC
-	CMP #$FE
-	BNE	DontJump
-	JMP LoadNewBG
-DontJump:
-	STA $0200, x
-	STX $0300
-	LDY $0300
-	INX ; The sprites x location is every 4 bytes
-	INX
-	INX
-	INX
-	CPY #$0F ; The sprite is last location in memory is $020F
-	BNE AlreadyRight
-
-MoveRightDone:
-
-	
 	JSR CheckStanding
 
 
-PPUCleanUp:
-	LDA #%10010000
-	STA $2000
-	LDA #%00011110
-	STA $2001
-	LDA #$00 ; tell the ppu there is no background scrolling
-	STA $2005
-	STA $2005
+	JSR PPUCleanUp
 
 
 	RTI
@@ -432,102 +100,22 @@ PPUCleanUp:
 
 	.bank 1
 	.org $E000
+
+	; Load Graphics Data Libraries
+
+	; Load Background Tile Libraries
+	.include "library\backgrounds\bg1\bg1_tiles.asm"
+	.include "library\backgrounds\bg2\bg2_tiles.asm"
+
+	; Load Color Libraries
+	.include "library\backgrounds\bg1\bg1_color_data.asm"
+
+	; Load Sprite Data Libraries
+	.include "graphics\mario_sprite_data.asm"
+
 palette:
 	.db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$27,$17,$0F   ;background palette
     .db $22,$1C,$15,$14,  $0F,$05,$26,$02,  $22,$1C,$15,$14,  $22,$02,$38,$3C   ;sprite palette
-
-sprites:
-      ;y pos tile attr x pos
-	.db $AF, $32, $01, $14 ; sprite 0
-	.db $AF, $33, $01, $1C ; sprite 1
-	.db $B7, $3B, $01, $16 ; sprite 2
-	.db $B7, $3C, $01, $1E ; sprite 3
-
-BackgroundTop:
-    .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-
-BackgroundTopMid:
-    .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$53,$54,$24,$24,$24,$24,$24,$24,$45,$45,$53,$54,$45,$45,$53,$54,$45,$45,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$55,$56,$24,$24,$24,$24,$24,$24,$47,$47,$55,$56,$47,$47,$55,$56,$47,$47,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-
-BackgroundBottomMid:
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$60,$61,$62,$63,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$31,$32,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$64,$65,$66,$67,$24,$24
-	.db $24,$24,$24,$24,$24,$30,$26,$34,$33,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$36,$37,$24,$24,$24,$24,$24,$68,$69,$26,$6a,$24,$24
-	.db $38,$24,$24,$24,$30,$26,$26,$26,$26,$33,$24,$24,$24,$24,$24,$24,$24,$24,$35,$25,$25,$38,$24,$24,$24,$24,$68,$69,$26,$6a,$24,$24
-
-BackgroundBottom:
-    .db $b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5
-	.db $b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7
-	.db $b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5
-	.db $b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7
-	.db $b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5
-	.db $b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7
-
-NewBGTop:
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-
-NewBGTopMid:
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$17,$0e,$20,$24,$1c,$0c,$1b,$0e,$0e,$17,$2b,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$fd,$fe,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-
-NewBGBottomMid:
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
-
-NewBGBottom:
-	.db $b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5
-	.db $b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7
-	.db $b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5
-	.db $b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7
-	.db $b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5,$b4,$b5
-	.db $b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7,$b6,$b7
-
-attribute:
-    .db %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000 
-    .db %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000 
-    .db %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000 
-    .db %00000000, %00110000, %00000000, %11110000, %11110000, %00110000, %00000000, %00000000 
-    .db %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000 
-    .db %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
-    .db %11111111, %11111111, %11111111, %11111111, %11111111, %11111111, %11111111, %11111111
-    .db %11111111, %11111111, %11111111, %11111111, %11111111, %11111111, %11111111, %11111111     
 
 
   	.org $FFFA
@@ -540,4 +128,4 @@ attribute:
 
 	.bank 2
 	.org $0000
-	.incbin "mario.chr"
+	.incbin "graphics\mario.chr"
