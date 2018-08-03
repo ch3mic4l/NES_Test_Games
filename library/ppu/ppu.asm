@@ -1,11 +1,6 @@
 PPUCleanUp:
-	LDA #%10010000
-	STA $2000
-	LDA #%00011110
-	STA $2001
-	LDA #$00 ; tell the ppu there is no background scrolling
-	STA $2005
-	STA $2005
+	JSR EnableNMI
+	JSR EnableSprites
 	RTS
 
 WaitForVBlank: 	 ; First wait for vblank to make sure PPU is ready
@@ -22,3 +17,19 @@ EnableSprites:
 	LDA #%00011110 ; enable sprites
 	STA $2001
 	RTS
+
+CleanUpPPURegisters:
+	LDA #$00
+	STA $2006
+	STA $2006
+	RTS
+
+HScrollRight:
+	INC scroll
+	LDA scroll
+	STA $2005
+
+	LDA #$00
+	STA $2005
+	RTS
+	

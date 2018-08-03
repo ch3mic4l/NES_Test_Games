@@ -71,13 +71,13 @@ ControllerMoveLeft:
 	BEQ ControllerLeftDone
 	LDX #$03
 MoveLeft:
-	LDA facingleft
+	LDA facingleft ; checking if mario is already facing left
 	CLC
 	CMP #$01
 	BEQ AlreadyLeft
-	JSR FaceLeft
+	JSR FaceLeft ; if mario is not facing left, then flip the sprites to be facing left
 	LDA #$01
-	STA facingleft
+	STA facingleft ; set the variable to show mario is facing left
 AlreadyLeft:
 	JSR WalkingLeft
 	LDA $0200, x
@@ -104,28 +104,13 @@ MoveRight:
 	CLC
 	CMP #$00
 	BEQ AlreadyRight
-	JSR FaceRight
+	JSR FaceRight ; if Mario is facing left, then face him looking right
 	LDA #$00
 	STA facingleft
 AlreadyRight:
 	JSR WalkingRight
 	LDA $0200, x
-	CLC
-	ADC #$02
-	CLC
-	CMP #$FE
-	BNE	DontJumpRight
-	JMP LoadNewBG
-DontJumpRight:
-	STA $0200, x
-	STX $0300
-	LDY $0300
-	INX ; The sprites x location is every 4 bytes
-	INX
-	INX
-	INX
-	CPY #$0F ; The sprite is last location in memory is $020F
-	BNE AlreadyRight
+	JSR HScrollRight
 
 MoveRightDone:
 	RTS

@@ -47,4 +47,19 @@ LoadAttributeLoop:
 	INX
 	CPX #$40
 	BNE LoadAttributeLoop
+
+LoadAttribute2:
+	LDA $2002
+	LDA #$27
+	STA $2006
+	LDA #$C0
+	STA $2006
+	LDX #$00
+
+LoadAttributeLoop2:
+	LDA attribute, x
+	STA $2007
+	INX
+	CPX #$40
+	BNE LoadAttributeLoop2
 	RTS

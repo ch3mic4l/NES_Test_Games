@@ -1,4 +1,4 @@
-HEADER:
+HEADER: ; Used for emulation only
 	.inesprg 1   ; 1x 16KB bank of PRG code
  	.ineschr 1   ; 1x 8KB bank of CHR data
  	.inesmap 0   ; mapper 0 = NROM, no bank swapping
@@ -20,6 +20,7 @@ HEADER:
 	.include "library\backgrounds\load_background.asm"
 	.include "library\backgrounds\bg1\bg1.asm"
 	.include "library\backgrounds\bg2\bg2.asm"
+	.include "library\backgrounds\fillbothtables.asm"
 
 	; Load Color Attributes
 	.include "library\backgrounds\load_palletes.asm"
@@ -30,8 +31,9 @@ HEADER:
 ; Setup Variables
 	.rsset $0000
 controller1state .rs 1 ; Holds the state of the controller (aka which buttons are pressed)
-walking .rs 1
-facingleft .rs 0
+walking .rs 1 ; Is Mario walking? 0 = no, 1 = yes
+facingleft .rs 1 ; Which direction is Marion facing? 0 = right 1 = left
+scroll .rs 1 ; hosizontal scroll count
 
 RESET:
 	SEI          ; disable IRQs
@@ -63,13 +65,13 @@ CLRMem:          ; Clear the RAM
 
 	JSR WaitForVBlank  ; Second wait for vblank, PPU is ready after this
 
-	JSR LoadPalettes
+	JSR LoadPalettes ; Load the color palettes
 
-	JSR LoadSprites
+	JSR LoadSprites ; Load the mario sprites
 
 	JSR PrepPPUForBGLoad ; Prep the PPU to load the first BG(BackGround)
 
-	JSR LoadBG1 ; Load the initial BG
+	JSR FillBothTablesLoop ; Load the initial BG
 
 	JSR LoadAttribute ; Apply color to the BG
 
@@ -78,7 +80,7 @@ CLRMem:          ; Clear the RAM
 	JSR EnableSprites
 
 Forever:
-	JMP Forever
+	JMP Forever ; Loop here until NMI is triggered
 
 NMI:
 	LDA #$00
@@ -86,16 +88,16 @@ NMI:
 	LDA #$02
 	STA $4014
 
-	JSR LoadControllerState
-	JSR ActOnButtonPresses
+	JSR LoadControllerState ; Load the state of the controller into controller1state variable
+	JSR ActOnButtonPresses ; Do the action of what button is pressed, right now just moves mario left or right
 
-	JSR CheckStanding
-
-
-	JSR PPUCleanUp
+	JSR CheckStanding ; Check if mario is standing or moving
 
 
-	RTI
+	JSR PPUCleanUp ; Clean up PPU to draw the next frame
+
+
+	RTI ; Return back to Forever loop until NMI is triggered again
 
 
 	.bank 1

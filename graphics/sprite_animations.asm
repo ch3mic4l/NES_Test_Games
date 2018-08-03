@@ -1,11 +1,11 @@
-SetStandingRight:
+SetStandingRight: ; If mario is standing and facing right set his sprites to be facing right
 	LDA #$3B
 	STA $0209
 	LDA #$3C
 	STA $020D
 	RTS
 
-SetStandingLeft:
+SetStandingLeft:  ; If mario is standing and facing left set his sprites to be facing left
 	LDA #$3C
 	STA $0209
 	LDA #$3B
@@ -40,10 +40,10 @@ FaceLeft:
 	ADC #$04
 	STA $0207
 	LDA #$41  ; horizontal flip
-	STA $020A
-	STA $0202
-	STA $0206
-	STA $020E
+	STA $020A ; horizontal flip
+	STA $0202 ; horizontal flip
+	STA $0206 ; horizontal flip
+	STA $020E ; horizontal flip
 	RTS
 
 FaceRight:
